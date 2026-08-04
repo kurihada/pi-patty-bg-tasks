@@ -178,6 +178,21 @@ function deleteLogFile(logPath: string): number {
  * actually changes. Call after any state change that affects running jobs.
  */
 export function renderSidebar(reg: BackgroundRegistry, ctx: UiContext): void {
+    if (reg.ctxDead) return;
+    try {
+        renderSidebarInner(reg, ctx);
+    } catch {
+        // The captured ctx went stale (session reload/fork/switch) — mark the
+        // registry dead and stop ticking rather than throw an uncaught
+        // exception from an async completion callback. Reset lastSidebarContent
+        // so a future (fresh) ctx re-renders instead of skipping a stale key.
+        reg.ctxDead = true;
+        reg.lastSidebarContent = undefined;
+        stopSidebarTicker(reg);
+    }
+}
+
+function renderSidebarInner(reg: BackgroundRegistry, ctx: UiContext): void {
     const pills: string[] = [];
     let runningCount = 0;
 

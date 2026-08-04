@@ -70,17 +70,28 @@ export function startBackgroundJob(args: {
         onOversize: () => terminateJobSilently(args.reg, args.job),
     });
     jobAc.signal.addEventListener("abort", cancelStall, { once: true });
-    void args.exit.then((code) => {
-        args.onExit?.(code);
-        completeJob({
-            job: args.job,
-            code,
-            reg: args.reg,
-            pi: args.pi,
-            ctx: args.ctx,
-            shouldNotify: args.shouldNotify,
-        });
-    });
+    void args.exit.then(
+        (code) => {
+            try {
+                args.onExit?.(code);
+                completeJob({
+                    job: args.job,
+                    code,
+                    reg: args.reg,
+                    pi: args.pi,
+                    ctx: args.ctx,
+                    shouldNotify: args.shouldNotify,
+                });
+            } catch (err) {
+                // The captured ctx can go stale (session reload/fork/switch)
+                // while the job runs — never let an async completion crash the
+                // process. The job is still terminal (exit already happened),
+                // and the coalesced notice path has its own stale-ctx retry.
+                console.error("[bg-tasks] error completing job", args.job.id, err);
+                terminateJobSilently(args.reg, args.job);
+            }
+        }
+    );
     renderSidebar(args.reg, args.ctx);
     return jobAc;
 }
@@ -377,7 +388,12 @@ export function requestJobDecision(args: {
     args.reg.pendingDecisionJobId = args.job.id;
     const label = `"${jobLabel(args.job)}"`;
     const elapsed = formatDuration(args.timeoutMs);
-    args.ctx.ui.notify(`Backgrounded ${label} after ${elapsed}; still running.`, "info");
+    try {
+        args.ctx.ui.notify(`Backgrounded ${label} after ${elapsed}; still running.`, "info");
+    } catch {
+        // Stale ctx (session reload/fork/switch between spawn and timeout) —
+        // the backgrounding already happened; the toast is best-effort only.
+    }
 }
 
 // --- Helpers -------------------------------------------------------------

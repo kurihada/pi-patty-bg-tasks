@@ -28,6 +28,10 @@ export class BackgroundRegistry {
     sidebarTimer: NodeJS.Timeout | undefined = undefined;
     /** Last rendered sidebar content — used to skip redundant widget updates. */
     lastSidebarContent: string | undefined = undefined;
+    /** True once a captured ctx went stale (session reload/fork/switch).
+     *  Sidebar rendering is skipped forever after — the registry's ctx can
+     *  never become fresh again, only a new registry (new session) can render. */
+    ctxDead = false;
 
     /** Finished jobs + monitor terminals awaiting a coalesced notice (notify.ts).
      *  Buffered so a whole turn's worth of finishes surfaces as one summary, not
